@@ -4,24 +4,37 @@ import (
 	"crypto/rc4"
 	"encoding/binary"
 	"fmt"
+	"github.com/account-login/icmp_tun/subtle"
 	"hash/crc32"
 	"math/rand"
 	"time"
 )
 
 type Obfuscator interface {
-	Encode([]byte) []byte
-	Decode([]byte) ([]byte, error)
+	Encode(header []byte, data []byte) []byte
+	Decode(dst []byte, src []byte) ([]byte, error)
+	HeaderSize() int
 }
 
 type NilObfs struct{}
 
-func (NilObfs) Encode(in []byte) []byte {
-	return in
+func (NilObfs) Encode(header []byte, data []byte) []byte {
+	return append(header, data...)
 }
 
-func (NilObfs) Decode(in []byte) ([]byte, error) {
-	return in, nil
+func (NilObfs) Decode(dst []byte, src []byte) ([]byte, error) {
+	// dst buf
+	if cap(dst) < len(src) {
+		dst = make([]byte, len(src))
+	}
+	dst = dst[:len(src)]
+
+	copy(dst, src)
+	return dst, nil
+}
+
+func (NilObfs) HeaderSize() int {
+	return 0
 }
 
 type RC4CRC32Obfs struct {
@@ -68,57 +81,84 @@ func ximf64(h uint64) uint64 {
 //           |
 //         rc4 key        xc4 payload padding
 // ---------------------- ----------- -------
-func (o RC4CRC32Obfs) Encode(in []byte) []byte {
-	pad := padLen(len(in), o.rand)
-	buf := make([]byte, 8+len(in)+pad)
+func (obfs RC4CRC32Obfs) Encode(header []byte, data []byte) []byte {
+	pad := padLen(len(data), obfs.rand)
+	buflen := len(header) + HS + len(data) + pad
+	var out []byte
+	if cap(header) >= buflen {
+		// reuse header buf
+		buf := header[len(header):]
+		if subtle.InexactOverlap(buf[HS:HS+len(data)], data) || subtle.AnyOverlap(buf[:HS], data) {
+			panic("overlap")
+		}
+		out = header[:buflen]
+	} else {
+		// new buf
+		out = make([]byte, buflen)
+		copy(out, header)
+	}
+	// to be filled
+	buf := out[len(header):buflen]
 
 	// padding
-	o.rand.Read(buf[8+len(in):])
+	obfs.rand.Read(buf[HS+len(data):])
 
 	// crc32 of payload
 	hasher := crc32.NewIEEE()
-	_, _ = hasher.Write(in)
+	_, _ = hasher.Write(data)
 	hash := hasher.Sum32()
 
 	// header
 	r := uint64(pad)
-	r |= uint64(o.rand.Intn(0x10000)) << 16
+	r |= uint64(obfs.rand.Intn(0x10000)) << 16
 	r |= uint64(hash) << 32
-	binary.LittleEndian.PutUint64(buf[:8], fmix64(r))
+	binary.LittleEndian.PutUint64(buf[:HS], fmix64(r))
 
 	// body
-	cipher, _ := rc4.NewCipher(buf[:8])
-	cipher.XORKeyStream(buf[8:], in)
+	cipher, _ := rc4.NewCipher(buf[:HS])
+	cipher.XORKeyStream(buf[HS:], data)
 
-	return buf
+	return out
 }
 
-func (RC4CRC32Obfs) Decode(in []byte) ([]byte, error) {
-	if len(in) < 8 {
-		return nil, fmt.Errorf("packet length %v < 8", len(in))
+func (RC4CRC32Obfs) Decode(dst []byte, src []byte) ([]byte, error) {
+	if len(src) < HS {
+		return nil, fmt.Errorf("packet length %v < %v", len(src), HS)
 	}
 
 	// pad
-	r := ximf64(binary.LittleEndian.Uint64(in[:8]))
+	r := ximf64(binary.LittleEndian.Uint64(src[:HS]))
 	pad := r & 0xffff
-	bodyLen := len(in) - 8 - int(pad)
+	bodyLen := len(src) - HS - int(pad)
 	if bodyLen < 0 {
 		return nil, fmt.Errorf("bad packet: packet length:%v padding length:%v",
-			len(in), pad)
+			len(src), pad)
 	}
 
+	// dst buf
+	if cap(dst) < bodyLen {
+		dst = make([]byte, bodyLen)
+	}
+	dst = dst[:bodyLen]
+
 	// payload
-	cipher, _ := rc4.NewCipher(in[:8])
-	cipher.XORKeyStream(in[8:8+bodyLen], in[8:8+bodyLen])
+	cipher, _ := rc4.NewCipher(src[:HS])
+	cipher.XORKeyStream(dst, src[HS:HS+bodyLen])
 
 	// crc32
 	hash := uint32(r >> 32)
 	hasher := crc32.NewIEEE()
-	_, _ = hasher.Write(in[8 : 8+bodyLen])
+	_, _ = hasher.Write(dst)
 	if calc := hasher.Sum32(); calc != hash {
 		return nil, fmt.Errorf("crc32 mismatch: [calc:%v] != [header:%v]",
 			calc, hash)
 	}
 
-	return in[8 : 8+bodyLen], nil
+	return dst, nil
+}
+
+const HS = 8
+
+func (RC4CRC32Obfs) HeaderSize() int {
+	return HS
 }
