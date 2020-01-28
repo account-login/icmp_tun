@@ -38,11 +38,15 @@ func checksumPut(dst []byte, src []byte) {
 	dst[0] = 0
 	dst[1] = 0
 	s := checksum(src)
-	// this xor trick does not work
-	//// Place checksum back in header; using ^= avoids the
-	//// assumption the checksum bytes are zero.
-	//dst[0] ^= byte(s)
-	//dst[1] ^= byte(s >> 8)
+	dst[0] = byte(s)
+	dst[1] = byte(s >> 8)
+}
+
+func checksumUpdate(dst []byte, old uint16, new uint16) {
+	s := uint32(dst[0]) + uint32(dst[1])<<8
+	s += uint32(old) + uint32(^new)
+	s = s>>16 + s&0xffff
+	s = s + s>>16
 	dst[0] = byte(s)
 	dst[1] = byte(s >> 8)
 }

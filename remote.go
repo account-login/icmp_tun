@@ -11,13 +11,13 @@ import (
 	"time"
 )
 
-// TODO: sysctl no echo reply
 // TODO: expire idle peer
 
 type Remote struct {
 	Target     string
 	NodeId     uint32
 	Verbose    bool
+	EnableEcho bool
 	Obfuscator Obfuscator
 	// states
 	taddr    *net.UDPAddr
@@ -112,12 +112,11 @@ func (r *Remote) local2remote(ctx context.Context) {
 			   |     Data ...
 		*/
 		if n < ICMPEchoHeaderSize {
-			ctxlog.Warnf(ctx, "icmp packet too short, length: %v", n)
-			// TODO: reply normal ping
+			ctxlog.Warnf(ctx, "icmp packet from [ip:%v] too short, length: %v", ipaddr, n)
 			continue
 		}
 		if buf[0] != ICMPTypeEcho {
-			ctxlog.Debugf(ctx, "not icmp type echo: %v", buf[0])
+			ctxlog.Debugf(ctx, "[ip:%v] not icmp type echo: %v", ipaddr, buf[0])
 			continue
 		}
 		icmpID := binary.BigEndian.Uint16(buf[4:6])
@@ -127,8 +126,25 @@ func (r *Remote) local2remote(ctx context.Context) {
 		// decode inplace
 		data, err := r.Obfuscator.Decode(icmpData[hs:], icmpData)
 		if err != nil {
-			ctxlog.Warnf(ctx, "Obfuscator.Decode: %v", err)
-			// TODO: reply normal ping
+			if r.EnableEcho {
+				// reply normal ping
+				buf[0] = ICMPTypeEchoReply
+				// update checksum
+				checksumUpdate(buf[2:4], ICMPTypeEcho, ICMPTypeEchoReply)
+				// reply echo
+				_, err = r.icmpconn.WriteTo(buf[:n], ipaddr)
+				if err != nil {
+					ctxlog.Errorf(ctx, "[ip:%v][icmpid:%v][icmpseq:%v] icmp echo reply: %v",
+						ipaddr, icmpID, icmpSeq, err)
+					continue
+				}
+
+				ctxlog.Debugf(ctx, "icmp echo reply to [ip:%v][icmpid:%v][icmpseq:%v] [size:%v]",
+					ipaddr, icmpID, icmpSeq, n)
+			} else {
+				ctxlog.Warnf(ctx, "[ip:%v][icmpid:%v][icmpseq:%v] Obfuscator.Decode: %v",
+					ipaddr, icmpID, icmpSeq, err)
+			}
 			continue
 		}
 		if &icmpData[hs] != &data[0] {
@@ -158,7 +174,7 @@ func (r *Remote) local2remote(ctx context.Context) {
 
 		// log
 		if r.Verbose {
-			ctxlog.Debugf(ctx, "recv from [local:%v][ip:%v] [icmpid:%v][icmpseq:%v] [size:%v/%v]",
+			ctxlog.Debugf(ctx, "recv from [local:%v] [ip:%v][icmpid:%v][icmpseq:%v] [size:%v/%v]",
 				src, ipaddr, icmpID, icmpSeq, len(data), n)
 		}
 
