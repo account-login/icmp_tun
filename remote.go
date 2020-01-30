@@ -169,7 +169,7 @@ func (r *Remote) local2remote(ctx context.Context) {
 			continue
 		}
 
-		// update peer addr
+		// update or create peer
 		peer := r.updatePeer(ctx, ipaddr, icmpID, icmpSeq, src, pktid)
 		if peer == nil {
 			continue
@@ -182,6 +182,7 @@ func (r *Remote) local2remote(ctx context.Context) {
 		}
 
 		// send data to target
+		// NOTE: race with r.delPeer()
 		_, err = peer.lconn.WriteToUDP(data, r.taddr)
 		if err != nil {
 			ctxlog.Errorf(ctx, "write target for [local:%v]: %v", src, err)
@@ -259,17 +260,22 @@ func (r *Remote) updatePeer(
 	return peer
 }
 
-func (r *Remote) delPeer(id uint32) {
+func (r *Remote) delPeer(ctx context.Context, id uint32) {
 	r.mu.Lock()
+	p := r.id2peer[id]
 	delete(r.id2peer, id)
 	r.mu.Unlock()
+	SafeClose(ctx, p.lconn)
 }
 
 func (p *localPeer) target2remote(ctx context.Context) {
 	ctxlog.Debugf(ctx, "ready to read from target for local")
 
-	//   1B |   1B |     2B | 2B |  2B | 8B |  4B |  4B |
-	// type | code | chksum | id | seq | HS | src | dst | data
+	// clean up
+	defer p.r.delPeer(ctx, p.id)
+
+	//   1B |   1B |     2B | 2B |  2B | 8B |  4B |  4B |  4B |    4B |
+	// type | code | chksum | id | seq | HS | src | dst | cmd | pktid | data
 	// -------------------------------
 	//        ICMP ECHO HEADER
 	hs := p.r.Obfuscator.HeaderSize()
@@ -344,9 +350,5 @@ func (p *localPeer) target2remote(ctx context.Context) {
 			ctxlog.Debugf(ctx, "reply icmp packet to local [pktid:%v] [size:%v/%v]",
 				p.pktid, n, len(encoded))
 		}
-	}
-
-	// clean up
-	SafeClose(ctx, p.lconn)
-	p.r.delPeer(p.id)
+	} // for loop
 }

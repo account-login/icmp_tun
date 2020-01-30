@@ -92,8 +92,8 @@ func (l *Local) client2local(ctx context.Context) {
 	icmpseq := uint16(rn >> 16)
 	ctxlog.Debugf(ctx, "ready to read from client [icmpid:%v]", icmpid)
 
-	//   1B |   1B |     2B | 2B |  2B | 8B |  4B |  4B |
-	// type | code | chksum | id | seq | HS | src | dst | data
+	//   1B |   1B |     2B | 2B |  2B | 8B |  4B |  4B |  4B |    4B |
+	// type | code | chksum | id | seq | HS | src | dst | cmd | pktid | data
 	// -------------------------------
 	//        ICMP ECHO HEADER
 	hs := l.Obfuscator.HeaderSize()
