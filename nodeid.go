@@ -4,11 +4,9 @@ import (
 	"context"
 	"encoding/binary"
 	"gopkg.in/account-login/ctxlog.v2"
-	"math/rand"
 	"net"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // from https://stackoverflow.com/a/37382208
@@ -35,7 +33,7 @@ func ParseNodeID(ctx context.Context, id string) uint32 {
 	}
 
 	if strings.ToLower(id) == "rand" {
-		return rand.New(rand.NewSource(time.Now().UnixNano())).Uint32()
+		return uint32(Rand64ByTime())
 	}
 
 	if ip := net.ParseIP(id).To4(); ip != nil {

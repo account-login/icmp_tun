@@ -6,7 +6,6 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/icmp"
 	"gopkg.in/account-login/ctxlog.v2"
-	"math/rand"
 	"net"
 	"sync/atomic"
 	"time"
@@ -28,9 +27,10 @@ type Local struct {
 	raddr    *net.IPAddr
 	icmpconn *icmp.PacketConn
 	lconn    *net.UDPConn
-	// client addr: *net.UDPConn
-	pcaddr unsafe.Pointer
-	quiter Quiter
+	pcaddr   unsafe.Pointer // client addr: *net.UDPConn
+	pktid    uint32
+	bm       *RingBitmap
+	quiter   Quiter
 }
 
 func (l *Local) Run(ctx context.Context) error {
@@ -64,6 +64,8 @@ func (l *Local) Run(ctx context.Context) error {
 	ctxlog.Infof(ctx, "start listening [remote:%v][local:%v]", l.raddr, l.lconn.LocalAddr())
 
 	// init states
+	l.pktid = uint32(Rand64ByTime())
+	l.bm = NewRingBitmap(kBitmapSize)
 	l.quiter.Init()
 
 	// convert ctx.Done() to quit flag
@@ -85,7 +87,7 @@ func (l *Local) Run(ctx context.Context) error {
 }
 
 func (l *Local) client2local(ctx context.Context) {
-	rn := rand.New(rand.NewSource(time.Now().UnixNano())).Uint32()
+	rn := Rand64ByTime()
 	icmpid := uint16(rn)
 	icmpseq := uint16(rn >> 16)
 	ctxlog.Debugf(ctx, "ready to read from client [icmpid:%v]", icmpid)
@@ -107,13 +109,14 @@ func (l *Local) client2local(ctx context.Context) {
 			break
 		}
 
-		// src dst
+		// src dst cmd
 		binary.LittleEndian.PutUint32(icmpData[hs+0:hs+4], l.LocalID)
 		binary.LittleEndian.PutUint32(icmpData[hs+4:hs+8], l.RemoteID)
+		binary.LittleEndian.PutUint32(icmpData[hs+8:hs+12], 0)
 
 		// read from client
 		_ = l.lconn.SetReadDeadline(time.Now().Add(kIOInterval))
-		n, addr, err := l.lconn.ReadFrom(icmpData[hs+4+4:])
+		n, addr, err := l.lconn.ReadFrom(icmpData[hs+kTunHeaderSize:])
 		if err != nil {
 			// skip timeout
 			if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
@@ -135,8 +138,12 @@ func (l *Local) client2local(ctx context.Context) {
 			atomic.StorePointer(&l.pcaddr, unsafe.Pointer(caddr))
 		}
 
+		// pktid
+		l.pktid++
+		binary.LittleEndian.PutUint32(icmpData[hs+12:hs+16], l.pktid)
+
 		// encode
-		encoded := l.Obfuscator.Encode(buf[:ICMPEchoHeaderSize], icmpData[hs:hs+4+4+n])
+		encoded := l.Obfuscator.Encode(buf[:ICMPEchoHeaderSize], icmpData[hs:hs+kTunHeaderSize+n])
 		if &buf[0] != &encoded[0] {
 			panic("should reuse buf")
 		}
@@ -156,8 +163,8 @@ func (l *Local) client2local(ctx context.Context) {
 
 		// log
 		if l.Verbose {
-			ctxlog.Debugf(ctx, "send icmp packet to remote [icmpseq:%v] [size:%v/%v]",
-				icmpseq, n, len(encoded))
+			ctxlog.Debugf(ctx, "send icmp packet to remote [icmpseq:%v] [pktid:%v] [size:%v/%v]",
+				icmpseq, l.pktid, n, len(encoded))
 		}
 	}
 
@@ -212,15 +219,16 @@ func (l *Local) remote2local(ctx context.Context) {
 			panic("should reuse buf")
 		}
 
-		// src dst
-		if len(data) < 8 {
+		// src dst cmd pktid
+		if len(data) < kTunHeaderSize {
 			ctxlog.Errorf(ctx, "[ip:%v][icmpid:%v][icmpseq:%v] short data, length: %v",
 				ipaddr, icmpID, icmpSeq, len(data))
 			continue
 		}
 		src := binary.LittleEndian.Uint32(data[0:4])
 		dst := binary.LittleEndian.Uint32(data[4:8])
-		data = data[8:]
+		pktid := binary.LittleEndian.Uint32(data[12:16])
+		data = data[kTunHeaderSize:]
 
 		if !(src == l.RemoteID && dst == l.LocalID) {
 			ctxlog.Errorf(ctx, "[ip:%v][icmpid:%v][icmpseq:%v] [src:%v][dst:%v] mismatch with [remote:%v][local:%v]",
@@ -230,9 +238,12 @@ func (l *Local) remote2local(ctx context.Context) {
 
 		// log
 		if l.Verbose {
-			ctxlog.Debugf(ctx, "recv from [remote:%v][ip:%v] [icmpid:%v][icmpseq:%v] [size:%v/%v]",
-				src, ipaddr, icmpID, icmpSeq, len(data), n)
+			ctxlog.Debugf(ctx, "recv from [remote:%v] [ip:%v][icmpid:%v][icmpseq:%v] [pktid:%v] [size:%v/%v]",
+				src, ipaddr, icmpID, icmpSeq, pktid, len(data), n)
 		}
+
+		// pktid
+		l.bm.Set(pktid)
 
 		// load client addr
 		caddr := (*net.UDPAddr)(atomic.LoadPointer(&l.pcaddr))

@@ -35,6 +35,8 @@ type localPeer struct {
 	icmpid  uint16
 	icmpseq uint16
 	lconn   *net.UDPConn
+	pktid   uint32
+	bm      *RingBitmap
 }
 
 func (r *Remote) Run(ctx context.Context) error {
@@ -151,14 +153,15 @@ func (r *Remote) local2remote(ctx context.Context) {
 			panic("should reuse buf")
 		}
 
-		// src dst
-		if len(data) < 8 {
+		// src dst cmd pktid
+		if len(data) < kTunHeaderSize {
 			ctxlog.Errorf(ctx, "short data, length: %v", len(data))
 			continue
 		}
 		src := binary.LittleEndian.Uint32(data[0:4])
 		dst := binary.LittleEndian.Uint32(data[4:8])
-		data = data[8:]
+		pktid := binary.LittleEndian.Uint32(data[12:16])
+		data = data[kTunHeaderSize:]
 
 		if dst != r.NodeId {
 			ctxlog.Errorf(ctx, "[dst:%v] != [myid:%v] [src:%v][ip:%v]",
@@ -167,15 +170,15 @@ func (r *Remote) local2remote(ctx context.Context) {
 		}
 
 		// update peer addr
-		peer := r.updatePeer(ctx, ipaddr, icmpID, icmpSeq, src)
+		peer := r.updatePeer(ctx, ipaddr, icmpID, icmpSeq, src, pktid)
 		if peer == nil {
 			continue
 		}
 
 		// log
 		if r.Verbose {
-			ctxlog.Debugf(ctx, "recv from [local:%v] [ip:%v][icmpid:%v][icmpseq:%v] [size:%v/%v]",
-				src, ipaddr, icmpID, icmpSeq, len(data), n)
+			ctxlog.Debugf(ctx, "recv from [local:%v] [ip:%v][icmpid:%v][icmpseq:%v] [pktid:%v] [size:%v/%v]",
+				src, ipaddr, icmpID, icmpSeq, pktid, len(data), n)
 		}
 
 		// send data to target
@@ -202,7 +205,8 @@ func (r *Remote) getPeer(id uint32) *localPeer {
 }
 
 func (r *Remote) updatePeer(
-	ctx context.Context, ipaddr *net.IPAddr, icmpID uint16, icmpSeq uint16, id uint32) *localPeer {
+	ctx context.Context, ipaddr *net.IPAddr,
+	icmpID uint16, icmpSeq uint16, id uint32, pktid uint32) *localPeer {
 	// body
 	ctx = ctxlog.Pushf(ctx, "[local:%v]", id)
 
@@ -213,7 +217,11 @@ func (r *Remote) updatePeer(
 	if !ok {
 		// new peer
 		ctxlog.Infof(ctx, "ip:id learned: %v:%v", ipaddr, icmpID)
-		peer = &localPeer{r: r, id: id, ipaddr: ipaddr, icmpid: icmpID, icmpseq: icmpSeq}
+		peer = &localPeer{
+			r: r, id: id, ipaddr: ipaddr, icmpid: icmpID, icmpseq: icmpSeq,
+			pktid: uint32(Rand64ByTime()),
+			bm:    NewRingBitmap(kBitmapSize),
+		}
 		var err error
 		peer.lconn, err = net.ListenUDP("udp4", nil)
 		if err != nil {
@@ -245,6 +253,9 @@ func (r *Remote) updatePeer(
 		peer.icmpseq = icmpSeq
 	}
 
+	// pktid
+	peer.bm.Set(pktid)
+
 	return peer
 }
 
@@ -273,13 +284,14 @@ func (p *localPeer) target2remote(ctx context.Context) {
 			break
 		}
 
-		// src dst
+		// src dst cmd
 		binary.LittleEndian.PutUint32(icmpData[hs+0:hs+4], p.r.NodeId)
 		binary.LittleEndian.PutUint32(icmpData[hs+4:hs+8], p.id)
+		binary.LittleEndian.PutUint32(icmpData[hs+8:hs+12], 0)
 
 		// read from local
 		_ = p.lconn.SetReadDeadline(time.Now().Add(kIOInterval))
-		n, addr, err := p.lconn.ReadFrom(icmpData[hs+4+4:])
+		n, addr, err := p.lconn.ReadFrom(icmpData[hs+kTunHeaderSize:])
 		if err != nil {
 			// skip timeout
 			if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
@@ -297,8 +309,12 @@ func (p *localPeer) target2remote(ctx context.Context) {
 			continue
 		}
 
+		// pktid
+		p.pktid++
+		binary.LittleEndian.PutUint32(icmpData[hs+12:hs+16], p.pktid)
+
 		// encode
-		encoded := p.r.Obfuscator.Encode(buf[:ICMPEchoHeaderSize], icmpData[hs:hs+4+4+n])
+		encoded := p.r.Obfuscator.Encode(buf[:ICMPEchoHeaderSize], icmpData[hs:hs+kTunHeaderSize+n])
 		if &buf[0] != &encoded[0] {
 			panic("should reuse buf")
 		}
@@ -325,7 +341,8 @@ func (p *localPeer) target2remote(ctx context.Context) {
 
 		// log
 		if p.r.Verbose {
-			ctxlog.Debugf(ctx, "reply icmp packet to local [size:%v/%v]", n, len(encoded))
+			ctxlog.Debugf(ctx, "reply icmp packet to local [pktid:%v] [size:%v/%v]",
+				p.pktid, n, len(encoded))
 		}
 	}
 

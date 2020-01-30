@@ -7,6 +7,7 @@ import (
 	"github.com/account-login/icmp_tun/subtle"
 	"hash/crc32"
 	"math/rand"
+	"os"
 	"time"
 )
 
@@ -50,7 +51,7 @@ func padLen(origin int, rand *rand.Rand) int {
 }
 
 func NewRC4CRC32Obfs() *RC4CRC32Obfs {
-	return &RC4CRC32Obfs{rand.New(rand.NewSource(time.Now().UnixNano()))}
+	return &RC4CRC32Obfs{rand.New(rand.NewSource(time.Now().UnixNano() ^ int64(os.Getpid())))}
 }
 
 // from https://github.com/aappleby/smhasher/blob/master/src/MurmurHash3.cpp
