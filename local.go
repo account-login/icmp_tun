@@ -196,7 +196,7 @@ func (l *Local) remote2local(ctx context.Context) {
 		}
 		ipaddr := addr.(*net.IPAddr)
 
-		if n < ICMPEchoHeaderSize {
+		if n < ICMPEchoHeaderSize+hs {
 			ctxlog.Warnf(ctx, "icmp packet too short, [ip:%v][length:%v]", ipaddr, n)
 			continue
 		}

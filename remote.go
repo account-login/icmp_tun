@@ -113,7 +113,7 @@ func (r *Remote) local2remote(ctx context.Context) {
 			   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 			   |     Data ...
 		*/
-		if n < ICMPEchoHeaderSize {
+		if n < ICMPEchoHeaderSize+hs {
 			ctxlog.Warnf(ctx, "icmp packet from [ip:%v] too short, length: %v", ipaddr, n)
 			continue
 		}
