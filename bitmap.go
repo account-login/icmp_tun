@@ -32,6 +32,10 @@ func NewRingBitmap(bitSize uint32) *RingBitmap {
 	}
 }
 
+func (bm *RingBitmap) Init(bitSize uint32) {
+	*bm = *NewRingBitmap(bitSize)
+}
+
 func (bm *RingBitmap) Last() uint32 {
 	return bm.last
 }

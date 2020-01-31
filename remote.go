@@ -36,7 +36,7 @@ type localPeer struct {
 	icmpseq uint16
 	lconn   *net.UDPConn
 	pktid   uint32
-	bm      *RingBitmap
+	st      Stats
 }
 
 func (r *Remote) Run(ctx context.Context) error {
@@ -181,6 +181,16 @@ func (r *Remote) local2remote(ctx context.Context) {
 				src, ipaddr, icmpID, icmpSeq, pktid, len(data), n)
 		}
 
+		// stats
+		if peer.st.Update(pktid) {
+			ctxlog.Infof(ctx, "[local:%v] loss count: [%v/%v] [%v/%v] [%v/%v]",
+				src,
+				peer.st.Loss100, peer.st.Count100,
+				peer.st.Loss1000, peer.st.Count1000,
+				peer.st.Loss10000, peer.st.Count10000,
+			)
+		}
+
 		// send data to target
 		// NOTE: race with r.delPeer()
 		_, err = peer.lconn.WriteToUDP(data, r.taddr)
@@ -221,8 +231,9 @@ func (r *Remote) updatePeer(
 		peer = &localPeer{
 			r: r, id: id, ipaddr: ipaddr, icmpid: icmpID, icmpseq: icmpSeq,
 			pktid: uint32(Rand64ByTime()),
-			bm:    NewRingBitmap(kBitmapSize),
 		}
+		peer.st.Init()
+
 		var err error
 		peer.lconn, err = net.ListenUDP("udp4", nil)
 		if err != nil {
@@ -253,9 +264,6 @@ func (r *Remote) updatePeer(
 		}
 		peer.icmpseq = icmpSeq
 	}
-
-	// pktid
-	peer.bm.Set(pktid)
 
 	return peer
 }

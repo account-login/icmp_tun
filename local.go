@@ -29,7 +29,7 @@ type Local struct {
 	lconn    *net.UDPConn
 	pcaddr   unsafe.Pointer // client addr: *net.UDPConn
 	pktid    uint32
-	bm       *RingBitmap
+	st       Stats
 	quiter   Quiter
 }
 
@@ -65,7 +65,7 @@ func (l *Local) Run(ctx context.Context) error {
 
 	// init states
 	l.pktid = uint32(Rand64ByTime())
-	l.bm = NewRingBitmap(kBitmapSize)
+	l.st.Init()
 	l.quiter.Init()
 
 	// convert ctx.Done() to quit flag
@@ -242,8 +242,15 @@ func (l *Local) remote2local(ctx context.Context) {
 				src, ipaddr, icmpID, icmpSeq, pktid, len(data), n)
 		}
 
-		// pktid
-		l.bm.Set(pktid)
+		// stats
+		if l.st.Update(pktid) {
+			ctxlog.Infof(ctx, "[remote:%v] loss count: [%v/%v] [%v/%v] [%v/%v]",
+				src,
+				l.st.Loss100, l.st.Count100,
+				l.st.Loss1000, l.st.Count1000,
+				l.st.Loss10000, l.st.Count10000,
+			)
+		}
 
 		// load client addr
 		caddr := (*net.UDPAddr)(atomic.LoadPointer(&l.pcaddr))
