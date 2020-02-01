@@ -18,4 +18,6 @@
 
 # proj
 .idea
-t/
+t
+/*.asm
+/*.svg

@@ -7,8 +7,8 @@ import (
 	"testing"
 )
 
-func TestRC4CRC32Obfs_NoHeader(t *testing.T) {
-	obfs := NewRC4CRC32Obfs()
+func TestSM64CRC32Obfs_NoHeader(t *testing.T) {
+	obfs := NewSM64CRC32Obfs()
 
 	for size := 0; size < 2000; size++ {
 		// generate data
@@ -28,8 +28,8 @@ func TestRC4CRC32Obfs_NoHeader(t *testing.T) {
 	}
 }
 
-func TestRC4CRC32Obfs_ReuseHeader(t *testing.T) {
-	obfs := NewRC4CRC32Obfs()
+func TestSM64CRC32Obfs_ReuseHeader(t *testing.T) {
+	obfs := NewSM64CRC32Obfs()
 
 	hs := 10
 	buf := make([]byte, hs+obfs.HeaderSize()+2000)

@@ -1,7 +1,6 @@
 package icmp_tun
 
 import (
-	"crypto/rc4"
 	"encoding/binary"
 	"fmt"
 	"github.com/account-login/icmp_tun/subtle"
@@ -38,7 +37,7 @@ func (NilObfs) HeaderSize() int {
 	return 0
 }
 
-type RC4CRC32Obfs struct {
+type SM64CRC32Obfs struct {
 	rand *rand.Rand
 }
 
@@ -50,8 +49,8 @@ func padLen(origin int, rand *rand.Rand) int {
 	return rand.Intn(padLimit - origin)
 }
 
-func NewRC4CRC32Obfs() *RC4CRC32Obfs {
-	return &RC4CRC32Obfs{rand.New(rand.NewSource(time.Now().UnixNano() ^ int64(os.Getpid())))}
+func NewSM64CRC32Obfs() *SM64CRC32Obfs {
+	return &SM64CRC32Obfs{rand.New(rand.NewSource(time.Now().UnixNano() ^ int64(os.Getpid())))}
 }
 
 // from https://github.com/aappleby/smhasher/blob/master/src/MurmurHash3.cpp
@@ -80,9 +79,9 @@ func ximf64(h uint64) uint64 {
 //           |
 //         fmix64
 //           |
-//         rc4 key        xc4 payload padding
+//         enc key        enc payload padding
 // ---------------------- ----------- -------
-func (obfs RC4CRC32Obfs) Encode(header []byte, data []byte) []byte {
+func (obfs SM64CRC32Obfs) Encode(header []byte, data []byte) []byte {
 	pad := padLen(len(data), obfs.rand)
 	buflen := len(header) + HS + len(data) + pad
 	var out []byte
@@ -116,13 +115,13 @@ func (obfs RC4CRC32Obfs) Encode(header []byte, data []byte) []byte {
 	binary.LittleEndian.PutUint64(buf[:HS], fmix64(r))
 
 	// body
-	cipher, _ := rc4.NewCipher(buf[:HS])
-	cipher.XORKeyStream(buf[HS:], data)
+	sm := SplitMix64(binary.LittleEndian.Uint64(buf[:HS]))
+	sm.XORKeyStream(buf[HS:], data)
 
 	return out
 }
 
-func (RC4CRC32Obfs) Decode(dst []byte, src []byte) ([]byte, error) {
+func (SM64CRC32Obfs) Decode(dst []byte, src []byte) ([]byte, error) {
 	if len(src) < HS {
 		return nil, fmt.Errorf("packet length %v < %v", len(src), HS)
 	}
@@ -143,8 +142,8 @@ func (RC4CRC32Obfs) Decode(dst []byte, src []byte) ([]byte, error) {
 	dst = dst[:bodyLen]
 
 	// payload
-	cipher, _ := rc4.NewCipher(src[:HS])
-	cipher.XORKeyStream(dst, src[HS:HS+bodyLen])
+	sm := SplitMix64(binary.LittleEndian.Uint64(src[:HS]))
+	sm.XORKeyStream(dst, src[HS:HS+bodyLen])
 
 	// crc32
 	hash := uint32(r >> 32)
@@ -160,6 +159,6 @@ func (RC4CRC32Obfs) Decode(dst []byte, src []byte) ([]byte, error) {
 
 const HS = 8
 
-func (RC4CRC32Obfs) HeaderSize() int {
+func (SM64CRC32Obfs) HeaderSize() int {
 	return HS
 }

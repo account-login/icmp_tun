@@ -81,7 +81,7 @@ func cmain() int {
 	if *noObfsArg {
 		remote.Obfuscator = icmp_tun.NilObfs{}
 	} else {
-		remote.Obfuscator = icmp_tun.NewRC4CRC32Obfs()
+		remote.Obfuscator = icmp_tun.NewSM64CRC32Obfs()
 	}
 
 	if *takeOverPingArg {

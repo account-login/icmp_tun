@@ -319,7 +319,7 @@ func (p *localPeer) target2remote(ctx context.Context) {
 
 		// verify target addr
 		if !(taddr.IP.Equal(p.r.taddr.IP) && taddr.Port == p.r.taddr.Port) {
-			ctxlog.Warnf(ctx, "drop from [non-target:%v] [datalen:%v]", taddr, n)
+			ctxlog.Warnf(ctx, "drop from [non-target:%v] [pktlen:%v]", taddr, n)
 			continue
 		}
 

@@ -51,7 +51,7 @@ func main() {
 	if *noObfsArg {
 		local.Obfuscator = icmp_tun.NilObfs{}
 	} else {
-		local.Obfuscator = icmp_tun.NewRC4CRC32Obfs()
+		local.Obfuscator = icmp_tun.NewSM64CRC32Obfs()
 	}
 
 	// sigint
