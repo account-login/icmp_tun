@@ -1,7 +1,6 @@
 package icmp_tun
 
 import (
-	"runtime"
 	"unsafe"
 )
 
@@ -16,18 +15,7 @@ func (s *SplitMix64) next() uint64 {
 	return result ^ (result >> 31)
 }
 
-// unaligned and little endian
-const kUALE = runtime.GOARCH == "386" || runtime.GOARCH == "amd64" || runtime.GOARCH == "ppc64le"
-
-func (s *SplitMix64) XORKeyStream(dst, src []byte) {
-	if kUALE {
-		s.fastXORKeyStream(dst, src)
-	} else {
-		s.slowXORKeyStream(dst, src)
-	}
-}
-
-func (s *SplitMix64) fastXORKeyStream(dst, src []byte) {
+func (s *SplitMix64) unalignedXORKeyStream(dst, src []byte) {
 	if len(src) == 0 {
 		return
 	}
@@ -49,7 +37,7 @@ func (s *SplitMix64) fastXORKeyStream(dst, src []byte) {
 	}
 }
 
-func (s *SplitMix64) slowXORKeyStream(dst, src []byte) {
+func (s *SplitMix64) genericXORKeyStream(dst, src []byte) {
 	if len(src) == 0 {
 		return
 	}
