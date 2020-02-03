@@ -67,13 +67,14 @@ func TestSplitMix64_XORKeyStream_Long(t *testing.T) {
 	}
 }
 
-func BenchmarkSplitMix64_XORKeyStream(b *testing.B) {
+func BenchmarkSplitMix64_XORKeyStream_Big(b *testing.B) {
 	data := make([]byte, 1024*1024*512)
 	_, _ = rand.Read(data)
 	sm := SplitMix64(rand.Uint64())
 	b.SetBytes(1)
 	b.ResetTimer()
 
+	//c1 := gotsc.BenchStart()
 	for remain := b.N; remain > 0; remain -= len(data) {
 		n := remain
 		if n > len(data) {
@@ -81,6 +82,28 @@ func BenchmarkSplitMix64_XORKeyStream(b *testing.B) {
 		}
 		sm.XORKeyStream(data[:n], data[:n])
 	}
+	//cycles := gotsc.BenchEnd() - c1
+	//b.StopTimer()
+	//b.Logf("cycles per loop: %v", float64(cycles)/float64(b.N)*16)
+}
+
+func BenchmarkSplitMix64_XORKeyStream_1k(b *testing.B) {
+	data := make([]byte, 1000)
+	_, _ = rand.Read(data)
+	sm := SplitMix64(rand.Uint64())
+
+	//overhead := gotsc.TSCOverhead()
+
+	b.SetBytes(int64(len(data)))
+	b.ResetTimer()
+
+	//c1 := gotsc.BenchStart()
+	for i := 0; i < b.N; i++ {
+		sm.XORKeyStream(data, data)
+	}
+	//cycles := gotsc.BenchEnd() - c1 - overhead
+	//b.StopTimer()
+	//b.Logf("cycles per loop: %v", float64(cycles)/float64(b.N*len(data))*16)
 }
 
 /*
@@ -96,4 +119,24 @@ BenchmarkSplitMix64_XORKeyStream-4   	1000000000	         0.331 ns/op
 BenchmarkSplitMix64_XORKeyStream-4   	1000000000	         0.292 ns/op	3424.46 MB/s
 // asm unroll factor 2
 BenchmarkSplitMix64_XORKeyStream-4   	1000000000	         0.230 ns/op	4347.58 MB/s
+// asm unroll factor 4
+BenchmarkSplitMix64_XORKeyStream-4   	1000000000	         0.250 ns/op	3999.77 MB/s
+// asm no unroll
+BenchmarkSplitMix64_XORKeyStream-4   	1000000000	         0.237 ns/op	4219.17 MB/s
+BenchmarkSplitMix64_XORKeyStream-4   	1000000000	         0.242 ns/op	4131.99 MB/s
+*/
+
+/*
+// no unroll
+BenchmarkSplitMix64_XORKeyStream_1k-4   	 5084454	       249 ns/op	4022.28 MB/s
+    splitmix64_test.go:107: cycles per loop: 10.31976248855826
+// unroll factor 2
+BenchmarkSplitMix64_XORKeyStream_1k-4   	 5205288	       232 ns/op	4308.77 MB/s
+    splitmix64_test.go:107: cycles per loop: 9.634580068576417
+// unroll factor 3
+BenchmarkSplitMix64_XORKeyStream_1k-4   	 4917750	       234 ns/op	4276.06 MB/s
+    splitmix64_test.go:107: cycles per loop: 9.711373271109755
+// unroll factor 4
+BenchmarkSplitMix64_XORKeyStream_1k-4   	 4742810	       231 ns/op	4331.09 MB/s
+    splitmix64_test.go:107: cycles per loop: 9.57790378952562
 */
