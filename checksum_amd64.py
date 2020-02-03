@@ -21,7 +21,7 @@ with Function("sum16b32", (b, n), uint32_t, target=uarch.default + isa.sse4_1) a
         PXOR(s, s)
 
     vector_loop = Loop()
-    SUB(nreg, 32)
+    SUB(nreg, 8 * factor)
     JB(vector_loop.end)
     with vector_loop:
         for i in range(factor):
@@ -29,14 +29,13 @@ with Function("sum16b32", (b, n), uint32_t, target=uarch.default + isa.sse4_1) a
         for i in range(factor):
             PADDD(s_regs[i], l_regs[i])
 
-        ADD(breg, 32)
-        SUB(nreg, 32)
+        ADD(breg, 8 * factor)
+        SUB(nreg, 8 * factor)
         JAE(vector_loop.begin)
 
     # sum s_regs
-    PADDD(s_regs[0], s_regs[1])
-    PADDD(s_regs[0], s_regs[2])
-    PADDD(s_regs[0], s_regs[3])
+    for s in s_regs[1:]:
+        PADDD(s_regs[0], s)
 
     # sum s_regs[0]
     PHADDD(s_regs[0], s_regs[0])
@@ -48,7 +47,7 @@ with Function("sum16b32", (b, n), uint32_t, target=uarch.default + isa.sse4_1) a
 
     # scalar loop
     scalar_loop = Loop()
-    ADD(nreg, 32)
+    ADD(nreg, 8 * factor)
     with scalar_loop:
         SUB(nreg, 2)
         JB(scalar_loop.end)

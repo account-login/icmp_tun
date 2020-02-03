@@ -74,7 +74,7 @@ func TestChecksum(t *testing.T) {
 	}
 }
 
-func BenchmarkChecksum(b *testing.B) {
+func BenchmarkChecksum_Long(b *testing.B) {
 	data := make([]byte, 1024*1024*512)
 	b.SetBytes(1)
 	b.ResetTimer()
@@ -91,6 +91,17 @@ func BenchmarkChecksum(b *testing.B) {
 	}
 }
 
+func BenchmarkChecksum_1k(b *testing.B) {
+	data := make([]byte, 1000)
+	_, _ = rand.Read(data)
+	b.SetBytes(int64(len(data)))
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		gTestU16 += checksum(data)
+	}
+}
+
 /*
 // naive
 BenchmarkChecksum-4   	1000000000	         0.372 ns/op	2688.02 MB/s
@@ -98,4 +109,15 @@ BenchmarkChecksum-4   	1000000000	         0.372 ns/op	2688.02 MB/s
 BenchmarkChecksum-4   	1000000000	         0.0910 ns/op	10988.38 MB/s
 // sse factor 4
 BenchmarkChecksum-4   	1000000000	         0.0780 ns/op	12819.79 MB/s
+*/
+
+/*
+// factor 4
+BenchmarkChecksum_1k-4   	18180770	        58.4 ns/op	17134.52 MB/s
+// factor 3
+BenchmarkChecksum_1k-4   	15999081	        74.4 ns/op	13443.84 MB/s
+// factor 2
+BenchmarkChecksum_1k-4   	15324738	        77.1 ns/op	12964.35 MB/s
+// no unroll
+BenchmarkChecksum_1k-4   	14035122	        84.3 ns/op	11863.33 MB/s
 */
