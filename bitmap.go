@@ -5,7 +5,7 @@ import (
 )
 
 type RingBitmap struct {
-	last  uint32
+	last  uint32 // NOTE: not musked
 	first uint32 // NOTE: not musked
 	mask  uint32
 	dmask uint32
@@ -30,6 +30,11 @@ func NewRingBitmap(bitSize uint32) *RingBitmap {
 		dmask: bitSize/32 - 1,
 		data:  make([]uint32, bitSize/32),
 	}
+}
+
+func (bm *RingBitmap) Clear() {
+	bm.last = kBitmapEmpty
+	bm.first = kBitmapEmpty
 }
 
 func (bm *RingBitmap) Init(bitSize uint32) {
@@ -90,14 +95,11 @@ func (bm *RingBitmap) Set(seq uint32) {
 		}
 	}
 
-	// musk seq
-	seq &= bm.mask
-
 	ldiff := (seq - bm.last) & bm.mask
 	if bm.last != kBitmapEmpty && ldiff <= bm.mask/2 && ldiff > 1 {
 		// seq > last + 1, unset bits in (last, seq)
-		istart := bm.last / 32
-		iend := seq / 32
+		istart := (bm.last & bm.mask) / 32
+		iend := (seq & bm.mask) / 32
 		m1 := (uint32(1) << ((bm.last % 32) + 1)) - 1
 		m2 := ^((uint32(1) << (seq % 32)) - 1)
 		if istart == iend {
@@ -119,5 +121,5 @@ func (bm *RingBitmap) Set(seq uint32) {
 	}
 
 	// set current bit
-	bm.data[seq/32] |= 1 << (seq % 32)
+	bm.data[(seq&bm.mask)/32] |= 1 << (seq % 32)
 }

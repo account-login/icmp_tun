@@ -17,7 +17,7 @@ func TestRingBitmap_Set_A(t *testing.T) {
 	// first
 	bm.Set(11 + bitsize)
 	assert.Equal(t, uint32(11+bitsize), bm.first)
-	assert.Equal(t, uint32(11), bm.last)
+	assert.Equal(t, uint32(11+bitsize), bm.last)
 	assert.Equal(t, []uint32{0b00001000_00000000, 0}, bm.data)
 	c, s = bm.Count(0, 11+bitsize)
 	assert.Equal(t, uint32(1), c)
@@ -26,7 +26,7 @@ func TestRingBitmap_Set_A(t *testing.T) {
 	// second
 	bm.Set(12 + bitsize)
 	assert.Equal(t, uint32(11+bitsize), bm.first)
-	assert.Equal(t, uint32(12), bm.last)
+	assert.Equal(t, uint32(12+bitsize), bm.last)
 	assert.Equal(t, []uint32{0b00011000_00000000, 0}, bm.data)
 	c, s = bm.Count(0, 12+bitsize)
 	assert.Equal(t, uint32(2), c)
@@ -60,7 +60,7 @@ func TestRingBitmap_Set_B(t *testing.T) {
 	// first
 	bm.Set(11 + bitsize)
 	assert.Equal(t, uint32(11+bitsize), bm.first)
-	assert.Equal(t, uint32(11), bm.last)
+	assert.Equal(t, uint32(11+bitsize), bm.last)
 	assert.Equal(t, []uint32{0b00001000_00000000, 0}, bm.data)
 	// out of order first
 	bm.Set(5 + bitsize)
@@ -81,7 +81,7 @@ func TestRingBitmap_Set_Skip(t *testing.T) {
 	}
 	bm.Set(bitsize)
 	assert.Equal(t, kBitmapFull, bm.first)
-	assert.Equal(t, uint32(0), bm.Last())
+	assert.Equal(t, uint32(bitsize), bm.Last())
 	assert.Equal(t, uint32(0xffffffff), bm.data[0])
 
 	// skip
@@ -97,12 +97,12 @@ func TestRingBitmap_Set_Skip(t *testing.T) {
 	assert.Equal(t, uint32(0b10000000), bm.data[1])
 	assert.Equal(t, uint32(0), bm.data[2])
 	assert.Equal(t, uint32(0xffff0000|0b11111110_00000000), bm.data[3])
-	assert.Equal(t, uint32(32+32+32+9), bm.Last())
+	assert.Equal(t, uint32(bitsize+32+32+32+9), bm.Last())
 
 	// out of order
 	bm.Set(bitsize + 32 + 32 + 32 + 7)
 	assert.Equal(t, uint32(0xffff0000|0b11111110_10000000), bm.data[3])
-	assert.Equal(t, uint32(32+32+32+9), bm.Last())
+	assert.Equal(t, uint32(bitsize+32+32+32+9), bm.Last())
 
 	c, s := bm.Count(bitsize, bitsize+32+32+32+9)
 	assert.Equal(t, uint32(6), c)

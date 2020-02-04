@@ -24,7 +24,13 @@ func (st *Stats) tail(length uint32) (loss uint32, count uint32) {
 	return c - s, c
 }
 
+const kPktidBreakThreshold = 1000
+
 func (st *Stats) Update(pktid uint32) (updated bool) {
+	if st.bm.Last()-pktid > kPktidBreakThreshold && pktid-st.bm.Last() > kPktidBreakThreshold {
+		st.bm.Clear()
+	}
+
 	st.bm.Set(pktid)
 	logdiff := st.bm.Last() - st.lastpktid
 	now := time.Now()
