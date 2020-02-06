@@ -17,10 +17,17 @@ def splitmix64(rval, sv_list):
     for i, sv in enumerate(sv_list):
         # result := uint64(*s)
         # result += 0x9E3779B97f4A7C15
-        ADD(rval, a1)
-        # LEA(sv, [rval + a1 * (i + 1)])
-        MOV(sv, rval)
-    # LEA(rval, [rval * len(sv_list)])
+        # ADD(rval, a1)
+        # MOV(sv, rval)
+        if i == 2:
+            # LEA(sv, [rval + a1 * 2])
+            # ADD(sv, a1)
+            LEA(sv, [rval + a3 * 1])
+        else:
+            # 1, 2, 4
+            LEA(sv, [rval + a1 * (i + 1)])
+    LEA(rval, [rval + a1 * len(sv_list)])
+
     for sv in sv_list:
         # result ^= result >> 30
         xorshift(sv, 30)
@@ -64,8 +71,11 @@ with Function("sm64xorLU", (s, dst, src, n), uint64_t, target=uarch.default) as 
     MOV(c2, 0x94D049BB133111EB)
 
     # rng output
-    factor = 2
+    factor = 4
     sv_regs = [GeneralPurposeRegister64() for _ in range(factor)]
+    if factor >= 3:
+        a3 = GeneralPurposeRegister64()
+        MOV(a3, (0x9E3779B97f4A7C15 * 3) & 0xffffffff_ffffffff)
 
     # vector loop
     vector_loop = Loop()
