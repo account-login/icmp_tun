@@ -123,6 +123,8 @@ BenchmarkSplitMix64_XORKeyStream-4   	1000000000	         0.250 ns/op	3999.77 MB
 // asm no unroll
 BenchmarkSplitMix64_XORKeyStream-4   	1000000000	         0.237 ns/op	4219.17 MB/s
 BenchmarkSplitMix64_XORKeyStream-4   	1000000000	         0.242 ns/op	4131.99 MB/s
+// lea factor 4 negative index
+BenchmarkSplitMix64_XORKeyStream_Big-4   	1000000000	         0.201 ns/op	4974.84 MB/s
 */
 
 /*
@@ -147,4 +149,6 @@ BenchmarkSplitMix64_XORKeyStream_1k-4   	 5239874	       225 ns/op	4447.86 MB/s
 BenchmarkSplitMix64_XORKeyStream_1k-4   	 5172118	       210 ns/op	4762.27 MB/s
 // lea factor 4 constant
 BenchmarkSplitMix64_XORKeyStream_1k-4   	 5713958	       203 ns/op	4917.07 MB/s
+// lea factor 4 negative index
+BenchmarkSplitMix64_XORKeyStream_1k-4   	 5882018	       196 ns/op	5114.51 MB/s
 */

@@ -77,15 +77,21 @@ with Function("sm64xorLU", (s, dst, src, n), uint64_t, target=uarch.default) as 
         a3 = GeneralPurposeRegister64()
         MOV(a3, (0x9E3779B97f4A7C15 * 3) & 0xffffffff_ffffffff)
 
+    # negative index
+    ADD(src_reg, count)
+    ADD(dst_reg, count)
+    NEG(count)
+
     # vector loop
     vector_loop = Loop()
-    SUB(count, 8 * factor)
-    JL(vector_loop.end)
+    ADD(count, 8 * factor)
+    JG(vector_loop.end)
     with vector_loop:
         """
         func (s *SplitMix64) next() uint64 {
             result := uint64(*s)
-            *s = SplitMix64(result + 0x9E3779B97f4A7C15)
+            result += 0x9E3779B97f4A7C15
+            *s = SplitMix64(result)
             result = (result ^ (result >> 30)) * 0xBF58476D1CE4E5B9
             result = (result ^ (result >> 27)) * 0x94D049BB133111EB
             return result ^ (result >> 31)
@@ -96,49 +102,42 @@ with Function("sm64xorLU", (s, dst, src, n), uint64_t, target=uarch.default) as 
         # dst = src ^ result
         src_val = GeneralPurposeRegister64()
         for i in range(factor):
-            MOV(src_val, qword[src_reg + 8 * i])
+            MOV(src_val, qword[src_reg + count * 1 + (8 * i - 8 * factor)])
             XOR(src_val, sv_regs[i])
-            MOV(qword[dst_reg + 8 * i], src_val)
+            MOV(qword[dst_reg + count * 1 + (8 * i - 8 * factor)], src_val)
 
         # loop end
-        ADD(src_reg, 8 * factor)
-        ADD(dst_reg, 8 * factor)
-        SUB(count, 8 * factor)
-        JGE(vector_loop.begin)
+        ADD(count, 8 * factor)
+        JLE(vector_loop.begin)
 
     sv0 = sv_regs[0]
-    ADD(count, 8 * factor)
+    SUB(count, 8 * factor - 8)
     if factor > 1:
-        with Loop() as qw_loop:
-            CMP(count, 8)
-            JL(qw_loop.end)
-
+        qw_loop = Loop()
+        JG(qw_loop.end)
+        with qw_loop:
             # count >= 8
             splitmix64(rval_reg, [sv0])
-            MOV(src_val, qword[src_reg])
+            MOV(src_val, qword[src_reg + count * 1 - 8])
             XOR(src_val, sv0)
-            MOV(qword[dst_reg], src_val)
+            MOV(qword[dst_reg + count * 1 - 8], src_val)
 
-            ADD(src_reg, 8)
-            ADD(dst_reg, 8)
-            SUB(count, 8)
-            JMP(qw_loop.begin)
+            ADD(count, 8)
+            JLE(qw_loop.begin)
 
     # scalar loop
     scalar_loop = Loop()
     # count != 0
-    TEST(count, count)
+    SUB(count, 8)
     JZ(scalar_loop.end)
     splitmix64(rval_reg, [sv0])
     with scalar_loop:
-        MOV(src_val.as_low_byte, byte[src_reg])
+        MOV(src_val.as_low_byte, byte[src_reg + count * 1])
         XOR(src_val, sv0)
-        MOV(byte[dst_reg], src_val.as_low_byte)
+        MOV(byte[dst_reg + count * 1], src_val.as_low_byte)
         SHR(sv0, 8)
 
-        ADD(src_reg, 1)
-        ADD(dst_reg, 1)
-        SUB(count, 1)
+        ADD(count, 1)
         JNZ(scalar_loop.begin)
 
     RETURN(rval_reg)

@@ -12,8 +12,11 @@ TEXT ·sm64xorLU(SB),4,$0-40
 	MOVQ $13787848793156543929, BP
 	MOVQ $10723151780598845931, R8
 	MOVQ $15755400384260043839, R9
-	SUBQ $32, DI
-	JLT vector_loop_end
+	ADDQ DI, CX
+	ADDQ DI, DX
+	NEGQ DI
+	ADDQ $32, DI
+	JGT vector_loop_end
 vector_loop_begin:
 		LEAQ 0(AX)(SI*1), R10
 		LEAQ 0(AX)(SI*2), R11
@@ -64,27 +67,24 @@ vector_loop_begin:
 		MOVQ R13, BX
 		SHRQ $31, BX
 		XORQ BX, R13
-		MOVQ 0(CX), BX
+		MOVQ -32(CX)(DI*1), BX
 		XORQ R10, BX
-		MOVQ BX, 0(DX)
-		MOVQ 8(CX), BX
+		MOVQ BX, -32(DX)(DI*1)
+		MOVQ -24(CX)(DI*1), BX
 		XORQ R11, BX
-		MOVQ BX, 8(DX)
-		MOVQ 16(CX), BX
+		MOVQ BX, -24(DX)(DI*1)
+		MOVQ -16(CX)(DI*1), BX
 		XORQ R12, BX
-		MOVQ BX, 16(DX)
-		MOVQ 24(CX), BX
+		MOVQ BX, -16(DX)(DI*1)
+		MOVQ -8(CX)(DI*1), BX
 		XORQ R13, BX
-		MOVQ BX, 24(DX)
-		ADDQ $32, CX
-		ADDQ $32, DX
-		SUBQ $32, DI
-		JGE vector_loop_begin
+		MOVQ BX, -8(DX)(DI*1)
+		ADDQ $32, DI
+		JLE vector_loop_begin
 vector_loop_end:
-	ADDQ $32, DI
+	SUBQ $24, DI
+	JGT qw_loop_end
 qw_loop_begin:
-		CMPQ DI, $8
-		JLT qw_loop_end
 		LEAQ 0(AX)(SI*1), R10
 		LEAQ 0(AX)(SI*1), AX
 		MOVQ R10, BX
@@ -98,15 +98,13 @@ qw_loop_begin:
 		MOVQ R10, BX
 		SHRQ $31, BX
 		XORQ BX, R10
-		MOVQ 0(CX), BX
+		MOVQ -8(CX)(DI*1), BX
 		XORQ R10, BX
-		MOVQ BX, 0(DX)
-		ADDQ $8, CX
-		ADDQ $8, DX
-		SUBQ $8, DI
-		JMP qw_loop_begin
+		MOVQ BX, -8(DX)(DI*1)
+		ADDQ $8, DI
+		JLE qw_loop_begin
 qw_loop_end:
-	TESTQ DI, DI
+	SUBQ $8, DI
 	JEQ scalar_loop_end
 	LEAQ 0(AX)(SI*1), R10
 	LEAQ 0(AX)(SI*1), AX
@@ -122,13 +120,11 @@ qw_loop_end:
 	SHRQ $31, SI
 	XORQ SI, R10
 scalar_loop_begin:
-		MOVB 0(CX), BX
+		MOVB 0(CX)(DI*1), BX
 		XORQ R10, BX
-		MOVB BX, 0(DX)
+		MOVB BX, 0(DX)(DI*1)
 		SHRQ $8, R10
-		ADDQ $1, CX
-		ADDQ $1, DX
-		SUBQ $1, DI
+		ADDQ $1, DI
 		JNE scalar_loop_begin
 scalar_loop_end:
 	MOVQ AX, ret+32(FP)
