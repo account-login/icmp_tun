@@ -14,10 +14,10 @@ TEXT ·sm64xorLU(SB),4,$0-40
 	SUBQ $16, DI
 	JLT vector_loop_end
 vector_loop_begin:
+		ADDQ SI, AX
 		MOVQ AX, R9
 		ADDQ SI, AX
 		MOVQ AX, R10
-		ADDQ SI, AX
 		MOVQ R9, BX
 		SHRQ $30, BX
 		XORQ BX, R9
@@ -55,8 +55,8 @@ vector_loop_end:
 qw_loop_begin:
 		CMPQ DI, $8
 		JLT qw_loop_end
-		MOVQ AX, R9
 		ADDQ SI, AX
+		MOVQ AX, R9
 		MOVQ R9, BX
 		SHRQ $30, BX
 		XORQ BX, R9
@@ -78,8 +78,8 @@ qw_loop_begin:
 qw_loop_end:
 	TESTQ DI, DI
 	JEQ scalar_loop_end
-	MOVQ AX, R9
 	ADDQ SI, AX
+	MOVQ AX, R9
 	MOVQ R9, SI
 	SHRQ $30, SI
 	XORQ SI, R9

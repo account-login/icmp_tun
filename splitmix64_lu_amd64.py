@@ -14,11 +14,13 @@ def xorshift(sv, shift_count):
 
 
 def splitmix64(rval, sv_list):
-    for sv in sv_list:
+    for i, sv in enumerate(sv_list):
         # result := uint64(*s)
-        # *s = SplitMix64(*s + 0x9E3779B97f4A7C15)
-        MOV(sv, rval)
+        # result += 0x9E3779B97f4A7C15
         ADD(rval, a1)
+        # LEA(sv, [rval + a1 * (i + 1)])
+        MOV(sv, rval)
+    # LEA(rval, [rval * len(sv_list)])
     for sv in sv_list:
         # result ^= result >> 30
         xorshift(sv, 30)
